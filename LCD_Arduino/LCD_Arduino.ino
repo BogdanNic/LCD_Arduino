@@ -91,38 +91,72 @@ Adafruit_GFX_Button on_btn, off_btn;
 // For the one we're using, its 300 ohms across the X plate
 
 //240x320 ID=0x5408
-void setup(void) {
-  Serial.begin(9600);
-  tft.begin(0x9325);
-  tft.fillScreen(BLACK);
-  tft.setTextSize(2);
-  tft.print("Temp");
-  tft.drawRect(2,2,236,316,GREEN);
-
-  //Print "Hello" Text
-  tft.setCursor(100,30);
-  tft.setTextColor(WHITE);
-  tft.setTextSize(4);
-  tft.print("Hello");
-  
-  //buttons
-   on_btn.initButton(&tft,  60, 290, 100, 40, WHITE, CYAN, BLACK, "ON", 2);
-   off_btn.initButton(&tft, 180, 290, 100, 40, WHITE, CYAN, BLACK, "OFF", 2);
-   on_btn.drawButton(false);
-   off_btn.drawButton(false);
+int pixel_x, pixel_y;     //Touch_getXY() updates global vars
+bool Touch_getXY(void)
+{
+    TSPoint p = ts.getPoint();
+    pinMode(YP, OUTPUT);      //restore shared pins
+    pinMode(XM, OUTPUT);
+    digitalWrite(YP, HIGH);   //because TFT control pins
+    digitalWrite(XM, HIGH);
+    bool pressed = (p.z > MINPRESSURE && p.z < MAXPRESSURE);
+    if (pressed) {
+        pixel_x = map(calc(p.x), TS_LEFT, TS_RT, 0, tft.width()); //.kbv makes sense to me
+        pixel_y = map(p.y, TS_TOP, TS_BOT, 0, tft.height());
+        Serial.print("XO = "); Serial.print(p.x);
+        Serial.print("\tX = "); Serial.println(pixel_x);      
+    }
+    return pressed;
+}
+int calc(int x)
+{
+  return 900 - x;
 }
 
+#define BLACK   0x0000
+#define BLUE    0x001F
+#define RED     0xF800
+#define GREEN   0x07E0
+#define CYAN    0x07FF
+#define MAGENTA 0xF81F
+#define YELLOW  0xFFE0
+#define WHITE   0xFFFF
 
+void setup(void)
+{
+    Serial.begin(9600);
+    uint16_t ID = tft.readID();
+    Serial.print("TFT ID = 0x");
+    Serial.println(ID, HEX);
+    Serial.println("Calibrate for your Touch Panel");
+    if (ID == 0xD3D3) ID = 0x9486; // write-only shield
+    tft.begin(0x9325);
+    tft.setRotation(0);            //PORTRAIT
+    tft.fillScreen(BLACK);
+    on_btn.initButton(&tft,  60, 200, 100, 40, WHITE, CYAN, BLACK, "ON", 2);
+    off_btn.initButton(&tft, 180, 200, 100, 40, WHITE, CYAN, BLACK, "OFF", 2);
+    on_btn.drawButton(false);
+    off_btn.drawButton(false);
+    tft.fillRect(40, 80, 160, 80, RED);
+}
 
-void loop(void) {
-  // a point object holds x y and z coordinates
-  TSPoint p = ts.getPoint();
-  
-  // we have some minimum pressure we consider 'valid'
-  // pressure of 0 means no pressing!
-  if (p.z > MINPRESSURE && p.z < MAXPRESSURE) {
-     Serial.print("X = "); Serial.print(p.x);
-     Serial.print("\tY = "); Serial.print(p.y);
-     Serial.print("\tPressure = "); Serial.println(p.z);
-  }
+/* two buttons are quite simple
+ */
+void loop(void)
+{
+    bool down = Touch_getXY();
+    on_btn.press(down && on_btn.contains(pixel_x, pixel_y));
+    off_btn.press(down && off_btn.contains(pixel_x, pixel_y));
+    if (on_btn.justReleased())
+        on_btn.drawButton();
+    if (off_btn.justReleased())
+        off_btn.drawButton();
+    if (on_btn.justPressed()) {
+        on_btn.drawButton(true);
+        tft.fillRect(40, 80, 160, 80, GREEN);
+    }
+    if (off_btn.justPressed()) {
+        off_btn.drawButton(true);
+        tft.fillRect(40, 80, 160, 80, RED);
+    }
 }
